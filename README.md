@@ -1,8 +1,28 @@
-# Chatterbox PT-BR server
+# Chatterbox PT-BR: self-hosted voice cloning API
 
 Serve Brazilian Portuguese speech with the Chatterbox Multilingual V3 checkpoint through a small HTTP API. The server handles reference audio, chunked synthesis and model readiness; models and reference voices stay in separate persistent volumes.
 
+[![Release](https://img.shields.io/github/v/release/bitdeep/chatterbox-ptbr-server)](https://github.com/bitdeep/chatterbox-ptbr-server/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+**Start here:** [Run a voice clone](#run) · [HTTP API](#api) · [Validation](#validation) · [Work with me](#work-with-me)
+
+## What this adds
+
+- A FastAPI service for **text-to-speech and voice cloning in pt-BR**, with a curl example you can run locally.
+- Readiness that distinguishes a listening process from a loaded model.
+- Bounded reference uploads, separate data volumes and explicit model unload.
+- A reusable Docker Compose service for applications that own authentication and customer data.
+
 This project supplies the server and deployment recipe. Chatterbox and its checkpoints are upstream work, credited in [THIRD_PARTY.md](THIRD_PARTY.md).
+
+```mermaid
+flowchart LR
+  R["Reference audio"] --> A["HTTP API"]
+  T["Portuguese text"] --> A
+  A --> M["Chatterbox on GPU"]
+  M --> W["PCM WAV speech"]
+```
 
 ## Run
 
@@ -55,3 +75,15 @@ docker run --rm --network none --entrypoint python \
 ```
 
 The CPU contract suite does not load a model. GPU validation must include real reference upload, synthesis, audio inspection and unloading; no benchmark is claimed merely from the unit suite.
+
+The initial release was checked with five CPU contract tests and synthetic reference upload, GPU synthesis and decoded audio inspection. These are functional checks, not a speech-quality benchmark.
+
+## Related projects
+
+Use [the inference SDK](https://github.com/bitdeep/gpu-worker-orchestrator) to coordinate this server with [Whisper ASR](https://github.com/bitdeep/whisper-asr-stack) and [vLLM](https://github.com/bitdeep/vllm-serving-stack) on a shared GPU. Qwen3 and Kokoro adapters also live in the SDK.
+
+## Work with me
+
+I build self-hosted inference services and speech pipelines: model integration, GPU memory coordination, API contracts and deployment validation. For consulting or engineering opportunities, [contact bitdeep on X](https://x.com/_wrbr).
+
+For reproducible bugs or feature requests, [open an issue](https://github.com/bitdeep/chatterbox-ptbr-server/issues). Include the version and a minimal synthetic example; keep credentials and personal voice recordings out of public issues.
