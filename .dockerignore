@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+private
+models
+data
+outputs
+node_modules
+artifacts
+**/__pycache__

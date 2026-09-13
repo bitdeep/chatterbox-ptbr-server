@@ -1,0 +1,15 @@
+services:
+  chatterbox:
+    extends:
+      file: engine.compose.yaml
+      service: chatterbox
+    build: .
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-8004}:8004"
+    volumes:
+      - models:/models
+      - references:/data/reference_audio
+
+volumes:
+  models:
+  references:

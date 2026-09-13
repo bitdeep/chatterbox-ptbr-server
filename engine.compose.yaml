@@ -1,0 +1,17 @@
+services:
+  chatterbox:
+    image: ${CHATTERBOX_IMAGE:-chatterbox-ptbr-server:0.1.0}
+    restart: "no"
+    environment:
+      CHATTERBOX_T3_FILE: t3_pt_br.safetensors
+      CHATTERBOX_S3GEN_FILE: s3gen_v3.pt
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 12g
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
