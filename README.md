@@ -14,6 +14,8 @@ Serve Brazilian Portuguese speech with the Chatterbox Multilingual V3 checkpoint
 - Bounded reference uploads, separate data volumes and explicit model unload.
 - A reusable Docker Compose service for applications that own authentication and customer data.
 
+The anatomy of a cloning request, and what a clone costs today, is chapter 03 of the [garage-inference book](https://github.com/bitdeep/garage-inference/blob/main/03-voice-cloning/README.md).
+
 This project supplies the server and deployment recipe. Chatterbox and its checkpoints are upstream work, credited in [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ```mermaid
