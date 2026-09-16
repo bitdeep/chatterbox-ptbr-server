@@ -76,3 +76,40 @@ class ServerContract(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PausaPedida(unittest.TestCase):
+    """
+    O silêncio faz parte da indução da auto-hipnose, e pedi-lo ao MOTOR vale mais do que montar por
+    fora: cortar o texto no chamador põe uma junta a cada pausa e, em modelo que clona, o timbre
+    pode variar entre os pedaços. A marcação é a mesma do Kokoro (`[pause:2.5s]`) para a frota ter
+    um formato só (16/09/2026).
+    """
+
+    def test_separa_fala_e_silencio_na_ordem(self):
+        self.assertEqual(
+            server.separar_pausas("Respire fundo.[pause:2.5s]Solte o ar."),
+            ["Respire fundo.", 2.5, "Solte o ar."],
+        )
+
+    # ⛔ Sem teto: quem decide quanto silêncio o áudio tem é quem escreve o roteiro.
+    def test_pausas_coladas_somam_sem_teto(self):
+        self.assertEqual(server.separar_pausas("a[pause:2s][pause:4s]b"), ["a", 6.0, "b"])
+        self.assertEqual(server.separar_pausas("a[pause:99s]b"), ["a", 99.0, "b"])
+
+    # ⛔ Descartar pausa nas pontas era regra do agente, não de quem usa: silêncio antes de a voz
+    # entrar é recurso de indução (correção do dono, 16/09/2026).
+    def test_pausa_no_comeco_e_no_fim_valem(self):
+        self.assertEqual(server.separar_pausas("[pause:3s]Respire.[pause:5s]"), [3.0, "Respire.", 5.0])
+
+    def test_texto_so_de_marcacao_nao_tem_o_que_dizer(self):
+        self.assertEqual(server.separar_pausas("[pause:3s][pause:2s]"), [])
+
+    def test_texto_sem_marca_continua_um_bloco_so(self):
+        self.assertEqual(server.separar_pausas("Respire fundo, devagar."), ["Respire fundo, devagar."])
+        self.assertEqual(server.separar_pausas("   "), [])
+
+    # ⛔ A marca é fechada: colchete solto no roteiro não vira pausa nem some do texto.
+    def test_marca_parecida_nao_conta(self):
+        self.assertEqual(server.separar_pausas("[pausa] Respire."), ["[pausa] Respire."])
+        self.assertEqual(server.separar_pausas("Respire [pause:2s"), ["Respire [pause:2s"])

@@ -28,6 +28,12 @@ PORT = int(os.environ.get("PORT", "8004"))
 MAX_CHUNK = 500
 MAX_REFERENCE_BYTES = 8 * 1024 * 1024
 SILENCE_BETWEEN_CHUNKS_S = 0.2
+# Pausa PEDIDA pelo chamador, na mesma marcação do Kokoro (`[pause:2.5s]`): um formato só para a
+# frota inteira. Sem isto, quem quer silêncio entre frases precisa cortar o texto e emendar o
+# áudio por fora — trabalho a mais e uma junta a mais para cada pausa.
+PAUSE_TAG = re.compile(r"\[pause:(\d+(?:\.\d+)?)s\]", re.IGNORECASE)
+# ⛔ Sem teto de pausa: quem decide quanto silêncio o áudio tem é quem escreve o roteiro
+# (dono, 16/09/2026). O limite que sobra é o tamanho do texto que o chamador manda.
 
 
 def log(msg: str) -> None:
@@ -147,6 +153,31 @@ def descarregar() -> None:
         pass
 
 
+def separar_pausas(texto: str) -> list[object]:
+    """
+    Texto em blocos: `str` é fala, `float` é silêncio em segundos.
+
+    Pausa no COMEÇO e no FIM valem: silêncio antes de a voz entrar é recurso de indução, e é o que
+    a pessoa escreve quando abre o roteiro com a marca. Pausas coladas somam, sem teto. Texto só
+    de marcação devolve lista vazia — não há o que dizer.
+    """
+    blocos: list[object] = []
+    for i, pedaco in enumerate(PAUSE_TAG.split(texto)):
+        if i % 2 == 1:
+            segundos = float(pedaco)
+            if blocos and isinstance(blocos[-1], float):
+                blocos[-1] += segundos
+            else:
+                blocos.append(segundos)
+            continue
+        fala = pedaco.strip()
+        if fala:
+            blocos.append(fala)
+    if not any(isinstance(bloco, str) for bloco in blocos):
+        return []
+    return blocos
+
+
 def dividir(texto: str, maximo: int) -> list[str]:
     limpo = re.sub(r"\s+", " ", texto).strip()
     if not limpo:
@@ -193,25 +224,41 @@ def sintetizar(texto: str, referencia: Path, language: str, exaggeration: float,
         modelo = _model
     if modelo is None:
         raise RuntimeError("modelo não carregado")
-    trechos = dividir(texto, min(max(chunk_size, 50), MAX_CHUNK)) if split_text else [texto.strip()]
+    # A pausa pedida corta ANTES de tudo: cada lado dela é sintetizado por conta e o silêncio
+    # entra com a duração exata, no lugar da junta curta de sempre.
+    blocos = separar_pausas(texto)
     partes: list[np.ndarray] = []
     silencio = np.zeros(int(modelo.sr * SILENCE_BETWEEN_CHUNKS_S), dtype=np.float32)
+    indice = 0
+    # Começa como "acabou de haver silêncio": antes da primeira fala não existe junta a preencher.
+    ultimo_foi_pausa = True
     with _gpu_lock:
-        for i, trecho in enumerate(trechos):
-            if seed is not None:
-                torch.manual_seed(seed + i)
-            wav = modelo.generate(
-                trecho,
-                language_id=language,
-                audio_prompt_path=str(referencia),
-                exaggeration=exaggeration,
-                cfg_weight=cfg_weight,
-                temperature=temperature,
-            )
-            audio = wav.squeeze().detach().cpu().numpy().astype(np.float32)
-            if partes:
-                partes.append(silencio)
-            partes.append(audio)
+        for bloco in blocos:
+            if isinstance(bloco, float):
+                partes.append(np.zeros(int(modelo.sr * bloco), dtype=np.float32))
+                ultimo_foi_pausa = True
+                continue
+            trechos = dividir(bloco, min(max(chunk_size, 50), MAX_CHUNK)) if split_text else [bloco.strip()]
+            for trecho in trechos:
+                if not trecho:
+                    continue
+                if seed is not None:
+                    torch.manual_seed(seed + indice)
+                indice += 1
+                wav = modelo.generate(
+                    trecho,
+                    language_id=language,
+                    audio_prompt_path=str(referencia),
+                    exaggeration=exaggeration,
+                    cfg_weight=cfg_weight,
+                    temperature=temperature,
+                )
+                audio = wav.squeeze().detach().cpu().numpy().astype(np.float32)
+                # Junta curta só entre trechos de FALA; depois de uma pausa pedida, ela sobraria.
+                if not ultimo_foi_pausa:
+                    partes.append(silencio)
+                partes.append(audio)
+                ultimo_foi_pausa = False
     saida = np.concatenate(partes) if partes else np.zeros(1, dtype=np.float32)
     pico = float(np.max(np.abs(saida))) if saida.size else 0.0
     if pico > 0.95:
